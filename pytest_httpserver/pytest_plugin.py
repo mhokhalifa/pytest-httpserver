@@ -1,8 +1,8 @@
-
-
 import os
+import warnings
 
 import pytest
+
 from .httpserver import HTTPServer
 
 
@@ -10,7 +10,15 @@ class Plugin:
     SERVER = None
 
 
-class PluginHTTPServer(HTTPServer):
+class PluginHTTPServerDeprecation(type):
+    def __init__(cls, name, bases, clsdict):
+        if len(cls.mro()) > 3:
+            warnings.warn(f"{name}: Class deprecated. Use HTTPServer instead.", DeprecationWarning)
+
+        super(PluginHTTPServerDeprecation, cls).__init__(name, bases, clsdict)
+
+
+class PluginHTTPServer(HTTPServer, metaclass=PluginHTTPServerDeprecation):
     def start(self):
         super().start()
         Plugin.SERVER = self
@@ -57,3 +65,12 @@ def pytest_sessionfinish(session, exitstatus):  # pylint: disable=unused-argumen
         Plugin.SERVER.clear()
         if Plugin.SERVER.is_running():
             Plugin.SERVER.stop()
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_fixture_setup(fixturedef, request):  # pylint: disable=unused-argument
+    if fixturedef.argname == 'httpserver_listen_address' and fixturedef.scope != 'session':
+        warnings.warn("httpserver_listen_address must be scoped with session.", DeprecationWarning)
+        yield
+    else:
+        yield
